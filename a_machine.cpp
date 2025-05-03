@@ -1,18 +1,19 @@
-#include <math.h>
-
 #include <spa/param/audio/format-utils.h>
 #include <pipewire/pipewire.h>
 
-#include <limits>
+#include <print>
 #include <vector>
+#include <chrono>
 
-const double Tau = M_PI + M_PI;
+
+const auto Epoch = std::chrono::steady_clock::now();
+
 
 const spa_audio_info_raw OutputFormat =
 {
-    .format = SPA_AUDIO_FORMAT_S32,
-    .rate = 44100,
-    .channels = 2
+    .format = SPA_AUDIO_FORMAT_F32,
+    .rate = 48000,
+    .channels = 1
 };
 
 
@@ -20,7 +21,6 @@ struct SessionData
 {
     pw_main_loop* Loop;
     pw_stream* Stream;
-    double Acc;
 };
 
 
@@ -48,18 +48,12 @@ void OnProcessInner(SessionData* Session)
         Frames = SPA_MIN(PBuffer->requested, Frames);
     }
 
+    //const std::chrono::duration<SampleT, std::milli> Offset = std::chrono::steady_clock::now() - Epoch;
+    const std::chrono::duration<SampleT, std::ratio<60>> Offset = std::chrono::steady_clock::now() - Epoch;
+    const SampleT Sample = Offset.count();
 
     for (int Frame = 0; Frame < Frames; Frame++)
     {
-        Session->Acc += Tau * 440 / OutputFormat.rate;
-
-        if (Session->Acc >= Tau)
-        {
-            Session->Acc -= Tau;
-        }
-
-        const double Range = double(std::numeric_limits<SampleT>::max());
-        const SampleT Sample = SampleT(sin(Session->Acc) * Range * 0.7);
         for (int Channel = 0; Channel < OutputFormat.channels; Channel++)
         {
             *OutSample++ = Sample;
@@ -73,9 +67,10 @@ void OnProcessInner(SessionData* Session)
     pw_stream_queue_buffer(Session->Stream, PBuffer);
 }
 
+
 void OnProcess(void* UserData)
 {
-    OnProcessInner<int32_t>((SessionData*)UserData);
+    OnProcessInner<float>((SessionData*)UserData);
 }
 
 
@@ -88,7 +83,7 @@ static const pw_stream_events StreamEvents =
 
 int main(int argc, char *argv[])
 {
-    SessionData Session{ nullptr, nullptr, 0.0 };
+    SessionData Session{ nullptr, nullptr };
 
     std::vector<const spa_pod*> Params;
     uint8_t SomeBuffer[1024];
@@ -100,24 +95,25 @@ int main(int argc, char *argv[])
 
     Session.Stream = pw_stream_new_simple(
         pw_main_loop_get_loop(Session.Loop),
-                                          "a machine",
-                                          pw_properties_new(
-                                              PW_KEY_MEDIA_TYPE, "Audio",
-                                              PW_KEY_MEDIA_CATEGORY, "Playback",
-                                              PW_KEY_MEDIA_ROLE, "Music",
-                                              nullptr),
-                                              &StreamEvents,
-                                              &Session);
+        "a machine",
+        pw_properties_new(
+            PW_KEY_MEDIA_TYPE, "Audio",
+            PW_KEY_MEDIA_CATEGORY, "Playback",
+            PW_KEY_MEDIA_ROLE, "Music",
+            nullptr),
+        &StreamEvents,
+        &Session);
 
     {
         Params.push_back(spa_format_audio_raw_build(&PodBuilder, SPA_PARAM_EnumFormat, &OutputFormat));
     }
 
     {
-        int Flags = PW_STREAM_FLAG_AUTOCONNECT | PW_STREAM_FLAG_MAP_BUFFERS | PW_STREAM_FLAG_RT_PROCESS;
+        int Flags = PW_STREAM_FLAG_MAP_BUFFERS | PW_STREAM_FLAG_RT_PROCESS | PW_STREAM_FLAG_NO_CONVERT;
         pw_stream_connect(Session.Stream, PW_DIRECTION_OUTPUT, PW_ID_ANY, (pw_stream_flags)Flags, Params.data(), 1);
     }
 
+    std::print("leave this running and also run b.out\n");
     pw_main_loop_run(Session.Loop);
 
     pw_stream_destroy(Session.Stream);
