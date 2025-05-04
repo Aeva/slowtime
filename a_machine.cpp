@@ -11,7 +11,7 @@ const auto Epoch = std::chrono::steady_clock::now();
 
 const spa_audio_info_raw OutputFormat =
 {
-    .format = SPA_AUDIO_FORMAT_F32,
+    .format = SPA_AUDIO_FORMAT_F64,
     .rate = 48000,
     .channels = 1
 };
@@ -48,12 +48,11 @@ void OnProcessInner(SessionData* Session)
         Frames = SPA_MIN(PBuffer->requested, Frames);
     }
 
-    //const std::chrono::duration<SampleT, std::milli> Offset = std::chrono::steady_clock::now() - Epoch;
-    const std::chrono::duration<SampleT, std::ratio<60>> Offset = std::chrono::steady_clock::now() - Epoch;
-    const SampleT Sample = Offset.count();
-
     for (int Frame = 0; Frame < Frames; Frame++)
     {
+        const std::chrono::duration<SampleT, std::ratio<60>> Offset = std::chrono::steady_clock::now() - Epoch;
+        const SampleT Sample = Offset.count();
+
         for (int Channel = 0; Channel < OutputFormat.channels; Channel++)
         {
             *OutSample++ = Sample;
@@ -70,7 +69,7 @@ void OnProcessInner(SessionData* Session)
 
 void OnProcess(void* UserData)
 {
-    OnProcessInner<float>((SessionData*)UserData);
+    OnProcessInner<double>((SessionData*)UserData);
 }
 
 

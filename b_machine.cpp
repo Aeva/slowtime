@@ -6,12 +6,9 @@
 #include <chrono>
 
 
-const auto Epoch = std::chrono::steady_clock::now();
-
-
 const spa_audio_info_raw InputFormat =
 {
-    .format = SPA_AUDIO_FORMAT_F32,
+    .format = SPA_AUDIO_FORMAT_F64,
     .rate = 48000,
     .channels = 1
 };
@@ -35,22 +32,46 @@ void OnProcessInner(SessionData* Session)
     }
 
     spa_buffer* SBuffer = PBuffer->buffer;
-    float* Samples = (float*)(SBuffer->datas[0].data);
+    SampleT* Samples = (SampleT*)(SBuffer->datas[0].data);
     if (Samples == nullptr)
     {
         return;
     }
 
-    uint32_t Count = SBuffer->datas[0].chunk->size / sizeof(float);
+    uint32_t Count = SBuffer->datas[0].chunk->size / sizeof(SampleT);
 
-    static float LastSample = 0.0;
-    for (int n = 0; n < Count; ++n)
+
+    static std::chrono::steady_clock::time_point LocalOrigin;
+    static SampleT TransmissionStart = 0.0;
+
+    auto LocalTime = std::chrono::steady_clock::now();
+    SampleT TransmittedMinutes = Samples[Count - 1];
+
+    static uint64_t FrameNumber = 0;
+
+
+    //const std::chrono::duration<SampleT, std::ratio<60>> Offset = std::chrono::steady_clock::now() - Epoch;
+
+    if (TransmissionStart == 0.0 && TransmittedMinutes > 0.0)
     {
-        float Sample = Samples[n];
-        if (Sample != LastSample)
+        LocalOrigin = LocalTime;
+        TransmissionStart = TransmittedMinutes;
+    }
+    else
+    {
+        const std::chrono::duration<SampleT, std::ratio<60>> LocalDelta = LocalTime - LocalOrigin;
+
+        const SampleT LocalDeltaMinutes = LocalDelta.count();
+        const SampleT MeasuredMinutes = TransmittedMinutes - TransmissionStart;
+        const SampleT ErrorMinutes = std::abs(MeasuredMinutes - LocalDeltaMinutes);
+
+        if ((++FrameNumber % 100) == 0)
         {
-            std::print("{}\n", Sample);
-            LastSample = Sample;
+            std::print(
+                "Measured({:.4f} s) - Expected({:.4f} s) = {:.3f} ms\n",
+                MeasuredMinutes * 60.0,
+                LocalDeltaMinutes * 60.0,
+                ErrorMinutes * 60.0 * 1000.0);
         }
     }
 
@@ -60,7 +81,7 @@ void OnProcessInner(SessionData* Session)
 
 void OnProcess(void* UserData)
 {
-    OnProcessInner<float>((SessionData*)UserData);
+    OnProcessInner<double>((SessionData*)UserData);
 }
 
 
