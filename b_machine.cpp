@@ -63,15 +63,15 @@ void OnProcessInner(SessionData* Session)
 
         const SampleT LocalDeltaMinutes = LocalDelta.count();
         const SampleT MeasuredMinutes = TransmittedMinutes - TransmissionStart;
-        const SampleT ErrorMinutes = std::abs(MeasuredMinutes - LocalDeltaMinutes);
+        const SampleT DriftMilliseconds = std::abs(MeasuredMinutes - LocalDeltaMinutes) * 60.0 * 1000.0;
 
         if ((++FrameNumber % 100) == 0)
         {
             std::print(
-                "Measured({:.4f} s) - Expected({:.4f} s) = {:.3f} ms\n",
+                "Stream({:.4f} s) - Clock({:.4f} s) = Drift({:.3f}) ms\n",
                 MeasuredMinutes * 60.0,
                 LocalDeltaMinutes * 60.0,
-                ErrorMinutes * 60.0 * 1000.0);
+                DriftMilliseconds);
         }
     }
 

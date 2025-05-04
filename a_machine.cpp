@@ -5,8 +5,15 @@
 #include <vector>
 #include <chrono>
 
+#define FRAME_TIME_MODE 1
+#define STEADY_TIME_MODE 2
 
+#define EXPERIMENT FRAME_TIME_MODE
+
+
+#if EXPERIMENT == STEADY_TIME_MODE
 const auto Epoch = std::chrono::steady_clock::now();
+#endif
 
 
 const spa_audio_info_raw OutputFormat =
@@ -48,16 +55,30 @@ void OnProcessInner(SessionData* Session)
         Frames = SPA_MIN(PBuffer->requested, Frames);
     }
 
+#if EXPERIMENT == FRAME_TIME_MODE
+    static uint64_t FramesProcessed = 1;
+    const double Interval = 1.0 / double(OutputFormat.rate);
+#endif
+
     for (int Frame = 0; Frame < Frames; Frame++)
     {
+#if EXPERIMENT == STEADY_TIME_MODE
         const std::chrono::duration<SampleT, std::ratio<60>> Offset = std::chrono::steady_clock::now() - Epoch;
         const SampleT Sample = Offset.count();
+
+#elif EXPERIMENT == FRAME_TIME_MODE
+        const SampleT Sample = double(FramesProcessed + Frame) * Interval / 60.0;
+#endif
 
         for (int Channel = 0; Channel < OutputFormat.channels; Channel++)
         {
             *OutSample++ = Sample;
         }
     }
+
+#if EXPERIMENT == FRAME_TIME_MODE
+    FramesProcessed += Frames;
+#endif
 
     SBuffer->datas[0].chunk->offset = 0;
     SBuffer->datas[0].chunk->stride = Stride;
